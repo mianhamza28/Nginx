@@ -196,3 +196,76 @@ ab -n 10000 -c 100 http://localhost:8081/
 Output mein `Requests per second` dekhein. Yeh aap ke VM ka asal andaza dega, kyunke VM ke numbers physical server se kam hote hain.
 
 **Note:** Upar ke numbers general benchmarks se andaza hain, aap ke hardware par farq ho sakta hai.
+
+
+ ## 1  worker_processes have  worker_connections 1024  , 4 worker nodes have 16  CPU  then ?  16384  worker_connections ? How Much  , Https , Reverse Proxy user handle it ?
+
+ Yahan pehle ek cheez clear kar lein, warna hisaab ghalat ho jayega: **nginx sirf master par hai**, 4 nodes par nginx nahi. Is liye 16 CPU wale nodes se nginx ke `worker_connections` nahi badhte.
+
+## Nginx ki capacity kis se decide hoti hai?
+
+Sirf **master ke CPU cores** se, jahan nginx chal raha hai:
+
+```
+Master: 4 cores → worker_processes 4
+4 × 1024 = 4096 slots   (nodes ke 16 CPU is mein shamil nahi)
+```
+
+16 CPU wale nodes apps ki power hain, nginx ki nahi. To `16 × 1024 = 16384` wala hisaab is setup mein sahi nahi.
+
+## 16384 tab hota jab...
+
+Agar **master ke paas hi 16 cores** hon:
+
+```
+16 workers × 1024 = 16384 slots
+```
+
+Ya master par 4 workers rakhein aur `worker_connections` 4096 kar dein:
+
+```
+4 × 4096 = 16384 slots
+```
+
+Dono tareeqon se slots barabar. Practical mein cores badhane se behtar, `worker_connections` badhana hi hota hai.
+
+## HTTPS + Reverse Proxy mein kitne users?
+
+Sabse pehle slots ka hisaab:
+
+```
+16384 slots ÷ 2 (proxy: client + backend) = taqreeban 8192 users ek saath
+```
+
+HTTPS ka slots par farq nahi parta (HTTPS ho ya HTTP, 1 client connection = 1 slot). Farq **CPU** par parta hai, kyunke encryption ka kharch hota hai:
+
+| Setup | Concurrent users (taqreeban) | Requests/sec (taqreeban) |
+|---|---|---|
+| Master 4 cores, HTTP | ~2048 (config limit) | 20,000+ |
+| Master 4 cores, HTTPS | ~2048 (config limit) | 5,000 se 15,000 |
+| Master 4 cores, `worker_connections 10240`, HTTPS | ~20,000 | 5,000 se 15,000 |
+
+**Dhyan dein:** "concurrent users" aur "requests/sec" alag cheezein hain. Bohat se users connection khula rakhte hain lekin har second request nahi bhejte, is liye connections zyada sambhal sakte hain.
+
+## Asal bottleneck kahan?
+
+16 nodes ki 16 CPU ki app power ke saath, aam taur par:
+
+- **Pehle nodes (apps) thaktay hain**, kyunke Python/Java bhari hoti hain
+- HTTPS mein nginx ka CPU bhi barhta hai, to HTTPS ke saath master ke 4 cores zyada busy honge
+- Zyada traffic ho to master ke cores badhayein ya HTTPS (SSL termination) alag load balancer par karein
+
+## Aap ke liye practical config
+
+```nginx
+worker_processes  auto;
+worker_rlimit_nofile  65535;
+
+events {
+    worker_connections  8192;
+}
+```
+
+Is se 4 × 8192 = 32,768 slots, proxy mein taqreeban 16,000 users. 4 cores par HTTPS ke saath requests/sec ka limit CPU se aayega, slots se nahi.
+
+Yeh numbers andaza hain, asal figure `ab` ya `wrk` se apne setup par test karke hi pata chalega.
