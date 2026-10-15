@@ -144,3 +144,55 @@ systemctl reload nginx
 ```
 
 Ek chhoti baat: system ki file limit (`ulimit -n`) bhi itni honi chahiye. Agar aap `worker_connections` ko bohat bara karein to nginx config mein `worker_rlimit_nofile 8192;` bhi add karni par sakti hai. Abhi default par rehna safe hai.
+
+
+**Kam az kam** (realistic numbers, 4 cores par):
+
+| Kaam | Taqreeban |
+|---|---|
+| **Concurrent connections** (ek saath open) | 10,000 se 50,000+ |
+| **Requests per second** (static ya simple proxy) | 20,000 se 50,000+ |
+| **Requests per second** (HTTPS, proxy) | 5,000 se 15,000 |
+
+To "hazaron" ka matlab kam az kam **kai hazaar (5,000 se 10,000)** connections hai, aur yeh bhi conservative andaza hai.
+
+## Lekin aap ke config mein limit kitni hai?
+
+Yahan ek zaroori baat: nginx ki apni taqat zyada hai, lekin **aap ki config ne limit laga rakhi hai**:
+
+```
+4 workers × 1024 = 4096 slots
+```
+
+Is liye abhi aap ka nginx 4096 connections par ruk jayega (proxy mein ~2048 users), chahe CPU kitna hi khali ho. Zyada chahiye to `worker_connections` badhana parega, jaise 10240:
+
+```nginx
+worker_processes  auto;
+worker_rlimit_nofile  65535;
+
+events {
+    worker_connections  10240;
+}
+```
+
+Phir 4 × 10240 = 40,960 slots, proxy mein taqreeban 20,000 users.
+
+## Yeh numbers kis par depend karte hain
+
+- **HTTPS ya HTTP**: HTTPS mein encryption ka CPU kharch hota hai, numbers kam
+- **Response ka size**: bari files par bandwidth pehle bottleneck banti hai
+- **Keep-alive**: idle connections bhi slots rokte hain
+- **RAM**: har connection thori memory leta hai (taqreeban 2-4 KB idle)
+
+## Apne server par khud napein
+
+Asal number sirf test se pata chalta hai:
+
+```bash
+apt install apache2-utils -y
+ab -n 10000 -c 100 http://localhost:8081/
+```
+
+Output mein `Requests per second` dekhein. Yeh aap ke VM ka asal andaza dega, kyunke VM ke numbers physical server se kam hote hain.
+
+**Note:** Upar ke numbers general benchmarks se andaza hain, aap ke hardware par farq ho sakta hai.
