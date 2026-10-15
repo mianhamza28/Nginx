@@ -72,3 +72,75 @@ events {
 Total capacity ka andaza: `worker_processes × worker_connections`. Misal ke taur par 4 workers × 1024 = taqreeban 4096 connections ek saath.
 
 Agar `nproc` ka output bata dein to main bata dunga ke aap ke liye kitne workers hone chahiye.
+
+
+
+`worker_connections` ek worker process ki **ek waqt mein kitne connections sambhalne ki limit** hai.
+
+Connection ka matlab hai koi bhi open link: browser se aaya hua client, ya nginx se kisi backend server (jaise `app1`/`app2`) tak jane wala link.
+
+## Example
+
+Maan lein `worker_connections 1024;` hai:
+
+- Ek worker 1024 connections ek saath handle kar sakta hai.
+- 1025wan user aaye to usay wait karna parega ya error milega (`worker_connections are not enough` error log mein aata hai).
+
+Aise samjhein: ek cashier ke paas ek waqt mein 1024 customers ki line sambhalne ki capacity hai.
+
+## Total capacity
+
+```
+worker_processes × worker_connections = total connections
+```
+
+| worker_processes | worker_connections | Total |
+|---|---|---|
+| 1 | 1024 | 1024 |
+| 2 | 1024 | 2048 |
+| 4 | 1024 | 4096 |
+
+## Reverse proxy / load balancer mein dhyan dein
+
+Agar nginx proxy ka kaam kar raha hai (jaise aap ka `app1`/`app2` wala setup), to har user request ke liye **2 connections** lagte hain: ek user se nginx tak, doosra nginx se backend tak. To asal capacity taqreeban aadhi ho jati hai:
+
+```
+4 workers × 1024 = 4096 connections → taqreeban 2048 users
+```
+
+## Aap ne jo do blocks bheje
+
+Dono `events { }` block ka hissa hain. Asal config aisi hoti hai:
+
+```nginx
+events {
+    worker_connections  1024;
+}
+```
+
+Aap ke dusre snippet mein closing `}` nazar nahi aa raha. Config mein har `{` ka ek `}` hona zaroori hai, warna `nginx -t` syntax error dega.
+
+## Kab badhana chahiye?
+
+Chhote ya medium server ke liye **1024 bilkul theek hai**. Sirf tab badhayein jab error log mein yeh aaye:
+
+```
+worker connections are not enough
+```
+
+Tab badhane ka tareeqa:
+
+```nginx
+events {
+    worker_connections  4096;
+}
+```
+
+Phir:
+
+```bash
+nginx -t
+systemctl reload nginx
+```
+
+Ek chhoti baat: system ki file limit (`ulimit -n`) bhi itni honi chahiye. Agar aap `worker_connections` ko bohat bara karein to nginx config mein `worker_rlimit_nofile 8192;` bhi add karni par sakti hai. Abhi default par rehna safe hai.
