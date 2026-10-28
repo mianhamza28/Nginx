@@ -278,6 +278,22 @@ sudo systemctl reload nginx
 
 Dekhein ke ek server band ho to kya hota hai.
 
+Haan, bilkul, Ubuntu ki IP **192.168.0.18** hi hai, aur config mein bhi wahi use hui hai. Koi cheez badalne ki zarorat nahi.
+
+Is setup mein IPs ka role yeh hai:
+
+| Machine | IP | Kahan use hui |
+|---|---|---|
+| Ubuntu (load balancer) | 192.168.0.18 | `server_name 192.168.0.18;` aur browser/curl mein |
+| RHEL (backend) | 192.168.0.16 | `upstream` ke andar `server 192.168.0.16:80;` |
+| Ubuntu ki apni website | 127.0.0.1:8080 | `upstream` ke andar, sirf internal |
+
+Yahan ek cheez confuse kar sakti hai: upstream mein Ubuntu ke liye `192.168.0.18` ki jagah `127.0.0.1:8080` isliye likha hai ke woh Ubuntu ki **apni internal website** hai jo sirf load balancer ko dikhti hai. Yeh Ubuntu ki IP ko ghalat nahi likha gaya, balke ek alag internal port hai taake port 80 load balancer ke paas rahe aur dono mein takrao na ho.
+
+Agar chahein to `127.0.0.1:8080` ki jagah `192.168.0.18:8080` bhi likh sakte hain (dono server block mein `listen 192.168.0.18:8080;`), lekin us surat mein port 8080 network par bhi khul jayega. `127.0.0.1` zyada safe hai.
+
+Browser mein aap hamesha **http://192.168.0.18** kholein, wahi load balancer hai aur wahin se request bari bari Ubuntu aur RHEL ko jayegi.
+
 1. RHEL par: `sudo systemctl stop nginx`
 2. Ubuntu par 6 baar `curl -sI http://192.168.0.18` chalayein. Sab jawab Ubuntu se aane chahiye, website chalti rahegi.
 3. Test ke baad RHEL par: `sudo systemctl start nginx`
